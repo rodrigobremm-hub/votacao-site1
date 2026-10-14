@@ -65,11 +65,11 @@
             <!-- Contador de Votos Restantes -->
             <div class="flex items-center space-x-4">
                 <div class="bg-slate-900 border border-slate-800 px-3.5 py-2 rounded-xl text-xs font-medium text-slate-300">
-                    Votos realizados: <span id="userVoteCount" class="font-bold text-brand-400">0</span>/2
+                    Seus votos realizados: <span id="userVoteCount" class="font-bold text-brand-400">0</span>/2
                 </div>
                 <button onclick="resetVotes()" class="text-xs text-slate-400 hover:text-rose-400 transition-colors flex items-center gap-1.5 px-3 py-2 rounded-lg hover:bg-slate-800/50">
                     <i class="fa-solid fa-rotate-left"></i>
-                    <span>Resetar Votos</span>
+                    <span>Resetar Votos Globais</span>
                 </button>
             </div>
         </div>
@@ -135,7 +135,7 @@
         firebase.initializeApp(firebaseConfig);
         const db = firebase.firestore();
 
-        const MAX_VOTES_PER_USER = 2; // Limite de 2 votos por usuário/sessão
+        const MAX_VOTES_PER_USER = 2;
 
         const initialSites = [
             { id: 1, author: 'Marley Renan', category: 'Clínica Veterinária', url: 'https://marley7976.github.io/site3/' },
@@ -157,8 +157,13 @@
         let currentCategory = 'all';
         let votes = {};
         
-        // Controle de votos locais da sessão
-        let userVoteCount = parseInt(localStorage.getItem('user_vote_count') || '0');
+        // Mapeamento dos votos que ESTE utilizador efetuou: { [siteId]: quantidade }
+        let myVotes = JSON.parse(localStorage.getItem('my_user_votes') || '{}');
+
+        // Calcula quantos votos o utilizador já usou no total
+        function getMyTotalVotesCount() {
+            return Object.values(myVotes).reduce((sum, val) => sum + val, 0);
+        }
 
         initialSites.forEach(site => {
             votes[site.id] = 0;
@@ -194,41 +199,48 @@
         }
 
         function vote(id, delta) {
-            // Se tentar votar positivo mas já atingiu o limite de 2 votos
-            if (delta > 0 && userVoteCount >= MAX_VOTES_PER_USER) {
+            const totalMyVotes = getMyTotalVotesCount();
+            const mySiteVotes = myVotes[id] || 0;
+
+            // Se for adicionar (+), valida o limite global de 2 votos
+            if (delta > 0 && totalMyVotes >= MAX_VOTES_PER_USER) {
                 alert('Você já atingiu o limite máximo de 2 votos por sessão!');
                 return;
             }
 
-            const currentVotes = votes[id] || 0;
-            const nextVotes = Math.max(0, currentVotes + delta);
-
-            // Atualiza a contagem do usuário
-            if (delta > 0) {
-                userVoteCount++;
-            } else if (delta < 0 && userVoteCount > 0) {
-                userVoteCount--;
+            // Se for remover (-), só permite se O PRÓPRIO utilizador tiver votado neste site
+            if (delta < 0 && mySiteVotes <= 0) {
+                alert('Você só pode remover votos que você mesmo realizou!');
+                return;
             }
 
-            localStorage.setItem('user_vote_count', userVoteCount.toString());
-            votes[id] = nextVotes;
+            // Atualiza o registo pessoal de votos
+            myVotes[id] = mySiteVotes + delta;
+            if (myVotes[id] <= 0) delete myVotes[id];
+
+            localStorage.setItem('my_user_votes', JSON.stringify(myVotes));
+
+            // Atualiza o total geral do site
+            const currentGlobalVotes = votes[id] || 0;
+            const nextGlobalVotes = Math.max(0, currentGlobalVotes + delta);
+            votes[id] = nextGlobalVotes;
 
             // Salva no Firebase
             db.collection("votes").doc(String(id)).set({
-                count: nextVotes
+                count: nextGlobalVotes
             }, { merge: true });
 
             renderCards();
         }
 
         function resetVotes() {
-            if (confirm('Tem certeza de que deseja zerar os votos do sistema e o seu limite local?')) {
+            if (confirm('Tem certeza de que deseja zerar os votos do sistema e os seus votos locais?')) {
                 initialSites.forEach(site => {
                     votes[site.id] = 0;
                     db.collection("votes").doc(String(site.id)).set({ count: 0 });
                 });
-                userVoteCount = 0;
-                localStorage.setItem('user_vote_count', '0');
+                myVotes = {};
+                localStorage.removeItem('my_user_votes');
                 renderCards();
             }
         }
@@ -238,8 +250,10 @@
             const emptyState = document.getElementById('emptyState');
             const searchVal = document.getElementById('searchInput').value.toLowerCase();
 
-            // Atualiza badge no header
-            document.getElementById('userVoteCount').textContent = userVoteCount;
+            const totalMyVotes = getMyTotalVotesCount();
+
+            // Atualiza contador no header
+            document.getElementById('userVoteCount').textContent = totalMyVotes;
 
             let filtered = initialSites.filter(site => {
                 const matchesCat = currentCategory === 'all' || site.category === currentCategory;
@@ -258,6 +272,8 @@
 
                 filtered.forEach((site, index) => {
                     const count = votes[site.id] || 0;
+                    const myCountForThisSite = myVotes[site.id] || 0;
+
                     const isGitHub = site.url.includes('github.com') && site.url.endsWith('.git');
                     const displayUrl = site.url.replace('https://', '').replace('.git', '');
 
@@ -266,9 +282,12 @@
                     else if (index === 1 && count > 0) rankBadge = `<span class="bg-slate-300/10 text-slate-300 border border-slate-300/30 text-xs px-2.5 py-1 rounded-full font-semibold"><i class="fa-solid fa-medal mr-1"></i>2º</span>`;
                     else if (index === 2 && count > 0) rankBadge = `<span class="bg-amber-700/10 text-amber-600 border border-amber-700/30 text-xs px-2.5 py-1 rounded-full font-semibold"><i class="fa-solid fa-award mr-1"></i>3º</span>`;
 
-                    // Desabilita os botões dependendo das regras de limite e valor 0
-                    const isPlusDisabled = userVoteCount >= MAX_VOTES_PER_USER;
-                    const isMinusDisabled = count === 0;
+                    // REGRAS DOS BOTÕES:
+                    // 1. O botão '+' fica desativado se o utilizador já atingiu 2 votos no total
+                    const isPlusDisabled = totalMyVotes >= MAX_VOTES_PER_USER;
+                    
+                    // 2. O botão '-' SÓ FICA ATIVO se o utilizador atual votou neste site específico (myCountForThisSite > 0)
+                    const isMinusDisabled = myCountForThisSite <= 0;
 
                     const card = document.createElement('div');
                     card.className = 'glass rounded-2xl p-5 flex flex-col justify-between card-hover border border-slate-800/80';
@@ -299,7 +318,7 @@
                             </a>
 
                             <div class="flex items-center bg-slate-900/90 rounded-xl border border-slate-800 p-1">
-                                <button onclick="vote(${site.id}, -1)" ${isMinusDisabled ? 'disabled' : ''} class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-slate-400 disabled:cursor-not-allowed">
+                                <button onclick="vote(${site.id}, -1)" ${isMinusDisabled ? 'disabled' : ''} class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 disabled:opacity-20 disabled:hover:bg-transparent disabled:hover:text-slate-400 disabled:cursor-not-allowed" title="${isMinusDisabled ? 'Você não votou neste site' : 'Remover seu voto'}">
                                     <i class="fa-solid fa-minus text-xs"></i>
                                 </button>
                                 
@@ -307,7 +326,7 @@
                                     ${count}
                                 </span>
 
-                                <button onclick="vote(${site.id}, 1)" ${isPlusDisabled ? 'disabled' : ''} class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-emerald-400 hover:bg-emerald-500/10 disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-slate-400 disabled:cursor-not-allowed">
+                                <button onclick="vote(${site.id}, 1)" ${isPlusDisabled ? 'disabled' : ''} class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-emerald-400 hover:bg-emerald-500/10 disabled:opacity-20 disabled:hover:bg-transparent disabled:hover:text-slate-400 disabled:cursor-not-allowed">
                                     <i class="fa-solid fa-plus text-xs"></i>
                                 </button>
                             </div>
