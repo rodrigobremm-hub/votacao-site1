@@ -1,483 +1,302 @@
 <!DOCTYPE html>
-<html lang="pt-BR">
+<html lang="pt-BR" class="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ranking e Votação de Websites</title>
-    <!-- Tailwind CSS CDN -->
+    <title>Sistema de Votação de Websites</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Lucide Icons -->
-    <script src="https://unpkg.com/lucide@latest"></script>
-    <!-- Google Fonts -->
-    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-    
     <script>
         tailwind.config = {
+            darkMode: 'class',
             theme: {
                 extend: {
-                    fontFamily: {
-                        sans: ['Plus Jakarta Sans', 'sans-serif'],
-                    },
                     colors: {
                         brand: {
-                            50: '#f0f6ff',
-                            100: '#e0edff',
-                            500: '#3b82f6',
-                            600: '#2563eb',
-                            700: '#1d4ed8',
+                            50: '#f0f9ff',
+                            100: '#e0f2fe',
+                            500: '#0ea5e9',
+                            600: '#0284c7',
+                            700: '#0369a1',
+                            900: '#0c4a6e',
                         }
                     }
                 }
             }
         }
     </script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    
+    <!-- Firebase SDK (para salvar os votos na nuvem) -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+
     <style>
-        body {
-            font-family: 'Plus Jakarta Sans', sans-serif;
-            background-color: #0f172a;
-            color: #f8fafc;
-        }
-        
-        .glass-card {
+        .glass {
             background: rgba(30, 41, 59, 0.7);
             backdrop-filter: blur(12px);
             border: 1px solid rgba(255, 255, 255, 0.08);
         }
-
-        .glass-modal {
-            background: rgba(15, 23, 42, 0.85);
-            backdrop-filter: blur(16px);
-        }
-
-        .site-card {
+        .card-hover {
             transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         }
-
-        /* Custom Scrollbar */
-        ::-webkit-scrollbar {
-            width: 8px;
-        }
-        ::-webkit-scrollbar-track {
-            background: #0f172a;
-        }
-        ::-webkit-scrollbar-thumb {
-            background: #334155;
-            border-radius: 4px;
-        }
-        ::-webkit-scrollbar-thumb:hover {
-            background: #475569;
+        .card-hover:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 12px 24px -10px rgba(14, 165, 233, 0.15);
         }
     </style>
 </head>
-<body class="min-h-screen flex flex-col justify-between selection:bg-blue-500 selection:text-white">
+<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col font-sans">
 
-    <!-- Header / Navbar -->
-    <header class="sticky top-0 z-30 border-b border-slate-800 bg-slate-900/80 backdrop-blur-md">
+    <!-- Header -->
+    <header class="glass sticky top-0 z-40 border-b border-slate-800/80">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
-            <div class="flex items-center gap-3">
-                <div class="p-2.5 bg-blue-600/20 text-blue-400 rounded-xl border border-blue-500/30">
-                    <i data-lucide="trophy" class="w-6 h-6"></i>
+            <div class="flex items-center space-x-3">
+                <div class="bg-gradient-to-tr from-brand-600 to-indigo-600 p-3 rounded-xl shadow-lg shadow-brand-500/20">
+                    <i class="fa-solid fa-check-to-slot text-white text-xl"></i>
                 </div>
                 <div>
-                    <h1 class="text-xl font-bold bg-gradient-to-r from-white via-slate-200 to-slate-400 bg-clip-text text-transparent">WebRank</h1>
-                    <p class="text-xs text-slate-400">Vote nos melhores sites e projetos</p>
+                    <h1 class="text-xl font-bold bg-gradient-to-r from-white via-slate-200 to-slate-400 bg-clip-text text-transparent">
+                        Portal de Votação
+                    </h1>
+                    <p class="text-xs text-slate-400">Avalie os melhores projetos desenvolvidos</p>
                 </div>
             </div>
 
-            <div class="flex items-center gap-3">
-                <button onclick="resetVotes()" title="Resetar Votos" class="p-2.5 text-slate-400 hover:text-rose-400 bg-slate-800 hover:bg-rose-500/10 rounded-xl border border-slate-700/80 hover:border-rose-500/30 transition-all text-xs font-medium flex items-center gap-2">
-                    <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
-                    <span class="hidden sm:inline">Resetar Votos</span>
-                </button>
-                <button onclick="openModal()" class="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-4 py-2.5 rounded-xl font-medium text-sm transition-all shadow-lg shadow-blue-600/25 active:scale-95">
-                    <i data-lucide="plus" class="w-4 h-4"></i>
-                    <span>Adicionar Site</span>
+            <!-- Botão Reset -->
+            <div class="flex items-center space-x-4">
+                <button onclick="resetVotes()" class="text-xs text-slate-400 hover:text-rose-400 transition-colors flex items-center gap-1.5 px-3 py-2 rounded-lg hover:bg-slate-800/50">
+                    <i class="fa-solid fa-rotate-left"></i>
+                    <span>Resetar Votos</span>
                 </button>
             </div>
         </div>
     </header>
 
     <!-- Main Content -->
-    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-1 w-full">
-        
-        <!-- Controls: Search & Category Filter -->
-        <section class="flex flex-col md:flex-row gap-4 mb-8 justify-between items-stretch md:items-center">
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-grow w-full">
+
+        <!-- Controls / Filters -->
+        <div class="flex flex-col md:flex-row gap-4 justify-between items-center mb-8">
+            <div class="flex flex-wrap gap-2 w-full md:w-auto" id="categoryFilters">
+                <button onclick="setCategory('all')" id="btn-all" class="filter-btn active px-4 py-2.5 rounded-xl text-sm font-medium transition-all bg-brand-600 text-white shadow-lg shadow-brand-500/20">
+                    <i class="fa-solid fa-border-all mr-2"></i>Todos
+                </button>
+                <button onclick="setCategory('Clínica Veterinária')" class="filter-btn px-4 py-2.5 rounded-xl text-sm font-medium text-slate-400 hover:bg-slate-800/60 hover:text-slate-200 border border-slate-800 transition-all">
+                    <i class="fa-solid fa-user-doctor mr-2"></i>Clínica Veterinária
+                </button>
+                <button onclick="setCategory('Petshop')" class="filter-btn px-4 py-2.5 rounded-xl text-sm font-medium text-slate-400 hover:bg-slate-800/60 hover:text-slate-200 border border-slate-800 transition-all">
+                    <i class="fa-solid fa-paw mr-2"></i>Petshop
+                </button>
+                <button onclick="setCategory('Advocacia')" class="filter-btn px-4 py-2.5 rounded-xl text-sm font-medium text-slate-400 hover:bg-slate-800/60 hover:text-slate-200 border border-slate-800 transition-all">
+                    <i class="fa-solid fa-scale-balanced mr-2"></i>Advocacia
+                </button>
+            </div>
+
             <!-- Search Bar -->
-            <div class="relative flex-1 max-w-md">
-                <i data-lucide="search" class="w-5 h-5 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"></i>
-                <input type="text" id="searchInput" oninput="filterAndRender()" placeholder="Buscar por autor ou link..." class="w-full pl-11 pr-4 py-2.5 bg-slate-800/80 border border-slate-700/80 rounded-xl text-sm text-slate-100 placeholder-slate-400 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all">
-            </div>
-
-            <!-- Categories Pill Scroll -->
-            <div class="flex items-center gap-2 overflow-x-auto pb-2 md:pb-0" id="categoryContainer">
-                <!-- Categories rendered dynamically via JS -->
-            </div>
-        </section>
-
-        <!-- Stats Bar -->
-        <div class="flex items-center justify-between mb-6 px-1">
-            <span id="siteCountText" class="text-xs font-semibold uppercase tracking-wider text-slate-400">Exibindo 0 sites</span>
-            <div class="flex items-center gap-2 text-xs text-slate-400">
-                <i data-lucide="arrow-up-down" class="w-3.5 h-3.5"></i>
-                <span>Ordenado por número de votos</span>
+            <div class="relative w-full md:w-72">
+                <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm"></i>
+                <input type="text" id="searchInput" oninput="renderCards()" placeholder="Buscar aluno ou URL..." class="w-full bg-slate-900/90 border border-slate-800 text-slate-200 text-sm rounded-xl pl-10 pr-4 py-2.5 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition-all">
             </div>
         </div>
 
-        <!-- Cards Grid -->
-        <div id="sitesGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            <!-- Site Cards dynamically generated here -->
-        </div>
+        <!-- Grid -->
+        <div id="sitesGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"></div>
 
         <!-- Empty State -->
-        <div id="emptyState" class="hidden flex-col items-center justify-center py-16 text-center">
-            <div class="p-4 bg-slate-800/50 rounded-full text-slate-500 mb-4 border border-slate-700/50">
-                <i data-lucide="globe-x" class="w-10 h-10"></i>
+        <div id="emptyState" class="hidden text-center py-16">
+            <div class="w-16 h-16 bg-slate-900 border border-slate-800 rounded-full flex items-center justify-center mx-auto mb-4 text-slate-500">
+                <i class="fa-solid fa-folder-open text-2xl"></i>
             </div>
-            <h3 class="text-lg font-semibold text-slate-200">Nenhum website encontrado</h3>
-            <p class="text-slate-400 text-sm max-w-sm mt-1">Tente ajustar sua busca ou selecione outra categoria!</p>
-            <button onclick="openModal()" class="mt-4 text-sm font-medium text-blue-400 hover:text-blue-300 underline underline-offset-4">Cadastrar novo site</button>
+            <h3 class="text-lg font-semibold text-slate-300">Nenhum site encontrado</h3>
         </div>
 
     </main>
 
-    <!-- Footer -->
-    <footer class="border-t border-slate-800 bg-slate-900/40 py-6">
-        <div class="max-w-7xl mx-auto px-4 text-center text-xs text-slate-500">
-            <p>Plataforma de votação comunitária de websites. Dados gravados localmente no navegador.</p>
-        </div>
+    <footer class="border-t border-slate-900 py-6 text-center text-xs text-slate-500">
+        <p>Sistema de Votação de Projetos - Atualizado em tempo real</p>
     </footer>
 
-    <!-- Add Website Modal -->
-    <div id="modalOverlay" class="fixed inset-0 z-50 hidden items-center justify-center p-4 glass-modal transition-opacity duration-200 opacity-0">
-        <div class="bg-slate-900 border border-slate-800 w-full max-w-lg rounded-2xl p-6 sm:p-8 shadow-2xl relative transform transition-transform duration-200 scale-95" id="modalCard">
-            <!-- Close Button -->
-            <button onclick="closeModal()" class="absolute top-5 right-5 text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition-all">
-                <i data-lucide="x" class="w-5 h-5"></i>
-            </button>
-
-            <div class="flex items-center gap-3 mb-6">
-                <div class="p-2 bg-blue-600/20 text-blue-400 rounded-lg border border-blue-500/30">
-                    <i data-lucide="plus-circle" class="w-5 h-5"></i>
-                </div>
-                <div>
-                    <h2 class="text-lg font-bold text-white">Adicionar Website</h2>
-                    <p class="text-xs text-slate-400">Insira as informações do novo projeto</p>
-                </div>
-            </div>
-
-            <form id="addSiteForm" onsubmit="handleAddSite(event)" class="space-y-4">
-                <div>
-                    <label for="siteTitle" class="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-1.5">Nome do Aluno / Projeto *</label>
-                    <input type="text" id="siteTitle" required placeholder="Ex: Marley Renan" class="w-full px-3.5 py-2.5 bg-slate-800 border border-slate-700 rounded-xl text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500">
-                </div>
-
-                <div>
-                    <label for="siteUrl" class="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-1.5">URL / Link *</label>
-                    <input type="url" id="siteUrl" required placeholder="https://github.com/..." class="w-full px-3.5 py-2.5 bg-slate-800 border border-slate-700 rounded-xl text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500">
-                </div>
-
-                <div>
-                    <label for="siteCategory" class="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-1.5">Categoria *</label>
-                    <select id="siteCategory" class="w-full px-3.5 py-2.5 bg-slate-800 border border-slate-700 rounded-xl text-sm text-slate-100 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500">
-                        <option value="Clínica Veterinária">Clínica Veterinária</option>
-                        <option value="Petshop">Petshop</option>
-                        <option value="Advocacia">Advocacia</option>
-                        <option value="Outros">Outros</option>
-                    </select>
-                </div>
-
-                <div class="pt-2 flex items-center justify-end gap-3">
-                    <button type="button" onclick="closeModal()" class="px-4 py-2.5 rounded-xl border border-slate-700 text-slate-300 hover:bg-slate-800 font-medium text-sm transition-all">Cancelar</button>
-                    <button type="submit" class="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-medium text-sm transition-all shadow-lg shadow-blue-600/25">Cadastrar Site</button>
-                </div>
-            </form>
-        </div>
-    </div>
-
-    <!-- Notification Toast -->
-    <div id="toast" class="fixed bottom-5 right-5 z-50 flex items-center gap-3 bg-slate-800 border border-slate-700 text-slate-100 px-4 py-3 rounded-xl shadow-xl transition-all duration-300 translate-y-20 opacity-0 pointer-events-none">
-        <i id="toastIcon" data-lucide="check-circle-2" class="w-5 h-5 text-emerald-400"></i>
-        <span id="toastMessage" class="text-sm font-medium">Operação realizada com sucesso!</span>
-    </div>
-
-    <!-- JavaScript Application Logic -->
     <script>
-        const INITIAL_SITES = [
-            // Clínica Veterinária
-            { id: '1', title: 'Marley Renan', url: 'https://marley7976.github.io/site3/', category: 'Clínica Veterinária', votes: 0, userVote: 0 },
-            { id: '2', title: 'PIRES', url: 'https://arthurpires84.github.io/sitebarbara/', category: 'Clínica Veterinária', votes: 0, userVote: 0 },
-            { id: '3', title: 'Danilson', url: 'https://danilson90.github.io/site01/', category: 'Clínica Veterinária', votes: 0, userVote: 0 },
+        // CONFIGURAÇÃO DO FIREBASE (Substitua pelos dados do seu projeto Firebase)
+        const firebaseConfig = {
+            apiKey: "AIzaSyB4h8t9FKvCIBAKVpYX404tqFFoAFEjMz0",
+            authDomain: "plasma-envoy-341217.firebaseapp.com",
+            projectId: "plasma-envoy-341217",
+            storageBucket: "plasma-envoy-341217.firebasestorage.app",
+            messagingSenderId: "354127030177",
+            appId: "1:354127030177:web:d4fe48af12e0cc35fa0de0",
+            measurementId: "G-EWVBYT7LSC"
+        };
 
-            // Petshop
-            { id: '4', title: 'Pedro Ribeiro', url: 'https://pedroribeiro26.github.io/patas-cia/index.html', category: 'Petshop', votes: 0, userVote: 0 },
-            { id: '5', title: 'Kássio Vladimir', url: 'https://kassiovladimirss-svg.github.io/sitekvznd/', category: 'Petshop', votes: 0, userVote: 0 },
-            { id: '6', title: 'Sordi', url: 'https://giansordi.github.io/Site3-PetShop/', category: 'Petshop', votes: 0, userVote: 0 },
-            { id: '7', title: 'Amaral', url: 'https://santos-amaral.github.io/site-1/', category: 'Petshop', votes: 0, userVote: 0 },
-            { id: '8', title: 'Flores', url: 'https://lucas-fff.github.io/site2/', category: 'Petshop', votes: 0, userVote: 0 },
-            { id: '9', title: 'Lucas Lopes', url: 'https://apkerror.github.io/site1/', category: 'Petshop', votes: 0, userVote: 0 },
+        let db = null;
+        if (firebaseConfig.apiKey !== "SUA_API_KEY") {
+            firebase.initializeApp(firebaseConfig);
+            db = firebase.firestore();
+        }
 
-            // Advocacia
-            { id: '10', title: 'Akin', url: 'https://akimael.github.io/Site_02/', category: 'Advocacia', votes: 0, userVote: 0 },
-            { id: '11', title: 'PIERRE', url: 'https://pierrez01.github.io/site1/', category: 'Advocacia', votes: 0, userVote: 0 },
-            { id: '12', title: 'EMILY CHAVES', url: 'https://echavescms-eng.github.io/site4/', category: 'Advocacia', votes: 0, userVote: 0 },
-            { id: '13', title: 'G Santos', url: 'https://guisantosss.github.io/SiteAdvogado/', category: 'Advocacia', votes: 0, userVote: 0 },
-            { id: '14', title: 'Viegas', url: 'https://viegas08.github.io/site1/', category: 'Advocacia', votes: 0, userVote: 0 }
+        const initialSites = [
+            { id: 1, author: 'Marley Renan', category: 'Clínica Veterinária', url: 'https://marley7976.github.io/site3/' },
+            { id: 2, author: 'PIRES', category: 'Clínica Veterinária', url: 'https://arthurpires84.github.io/sitebarbara/' },
+            { id: 3, author: 'Projeto 01', category: 'Clínica Veterinária', url: 'https://danilson90.github.io/site01/' },
+            { id: 4, author: 'Pedro Ribeiro', category: 'Petshop', url: 'https://pedroribeiro26.github.io/patas-cia/index.html' },
+            { id: 5, author: 'Kássio Vladimir', category: 'Petshop', url: 'https://kassiovladimirss-svg.github.io/sitekvznd/' },
+            { id: 6, author: 'Sordi', category: 'Petshop', url: 'https://giansordi.github.io/Site3-PetShop/' },
+            { id: 7, author: 'Amaral', category: 'Petshop', url: 'https://santos-amaral.github.io/site-1/' },
+            { id: 8, author: 'Flores', category: 'Petshop', url: 'https://lucas-fff.github.io/site2/' },
+            { id: 9, author: 'Lucas Lopes', category: 'Petshop', url: 'https://apkerror.github.io/site1/' },
+            { id: 10, author: 'Akin', category: 'Advocacia', url: 'https://akimael.github.io/Site_02/' },
+            { id: 11, author: 'PIERRE', category: 'Advocacia', url: 'https://pierrez01.github.io/site1/' },
+            { id: 12, author: 'EMILY CHAVES', category: 'Advocacia', url: 'https://echavescms-eng.github.io/site4/' },
+            { id: 13, author: 'G santos', category: 'Advocacia', url: 'https://guisantosss.github.io/SiteAdvogado/' },
+            { id: 14, author: 'Viegas', category: 'Advocacia', url: 'https://viegas08.github.io/site1/' }
         ];
 
-        let sites = [];
-        let activeCategory = 'Todos';
+        let currentCategory = 'all';
+        let votes = JSON.parse(localStorage.getItem('site_votes_v4')) || {};
 
-        window.addEventListener('DOMContentLoaded', () => {
-            loadSites();
-            renderCategories();
-            filterAndRender();
-            lucide.createIcons();
+        initialSites.forEach(site => {
+            if (votes[site.id] === undefined || votes[site.id] < 0) {
+                votes[site.id] = 0;
+            }
         });
 
-        function loadSites() {
-            const stored = localStorage.getItem('webrank_student_sites');
-            if (stored) {
-                try {
-                    sites = JSON.parse(stored);
-                } catch (e) {
-                    sites = INITIAL_SITES;
-                }
-            } else {
-                sites = INITIAL_SITES;
-                saveSites();
-            }
-        }
-
-        function saveSites() {
-            localStorage.setItem('webrank_student_sites', JSON.stringify(sites));
-        }
-
-        function resetVotes() {
-            if (confirm('Tem certeza de que deseja resetar todos os votos para 0?')) {
-                sites.forEach(s => {
-                    s.votes = 0;
-                    s.userVote = 0;
+        if (db) {
+            db.collection("votes").onSnapshot((snapshot) => {
+                snapshot.forEach((doc) => {
+                    const count = doc.data().count;
+                    votes[doc.id] = count < 0 ? 0 : count;
                 });
-                saveSites();
-                filterAndRender();
-                showToast('Todos os votos foram resetados!');
+                renderCards();
+            });
+        }
+
+        function getCategoryIcon(cat) {
+            switch(cat) {
+                case 'Clínica Veterinária': return 'fa-user-doctor';
+                case 'Petshop': return 'fa-paw';
+                case 'Advocacia': return 'fa-scale-balanced';
+                default: return 'fa-globe';
             }
-        }
-
-        function getCategories() {
-            const categories = new Set(sites.map(s => s.category));
-            return ['Todos', ...Array.from(categories)];
-        }
-
-        function renderCategories() {
-            const container = document.getElementById('categoryContainer');
-            const categories = getCategories();
-
-            container.innerHTML = categories.map(cat => {
-                const isActive = cat === activeCategory;
-                const activeClasses = isActive 
-                    ? 'bg-blue-600 text-white border-blue-500 shadow-md shadow-blue-600/20' 
-                    : 'bg-slate-800/80 text-slate-400 hover:bg-slate-700/80 hover:text-slate-200 border-slate-700/80';
-                
-                return `
-                    <button onclick="setCategory('${cat}')" class="px-3.5 py-1.5 rounded-xl text-xs font-medium border whitespace-nowrap transition-all ${activeClasses}">
-                        ${cat}
-                    </button>
-                `;
-            }).join('');
         }
 
         function setCategory(cat) {
-            activeCategory = cat;
-            renderCategories();
-            filterAndRender();
+            currentCategory = cat;
+            document.querySelectorAll('.filter-btn').forEach(btn => {
+                btn.classList.remove('bg-brand-600', 'text-white', 'shadow-lg', 'shadow-brand-500/20');
+                btn.classList.add('text-slate-400', 'hover:bg-slate-800/60', 'hover:text-slate-200');
+            });
+            event.currentTarget.classList.remove('text-slate-400', 'hover:bg-slate-800/60', 'hover:text-slate-200');
+            event.currentTarget.classList.add('bg-brand-600', 'text-white', 'shadow-lg', 'shadow-brand-500/20');
+            renderCards();
         }
 
-        function filterAndRender() {
-            const searchQuery = document.getElementById('searchInput').value.toLowerCase().trim();
+        // Função de votação atualizada com Math.max(0, ...)
+        function vote(id, delta) {
+            const currentVotes = votes[id] || 0;
+            // Garante que o resultado nunca seja menor que 0
+            votes[id] = Math.max(0, currentVotes + delta);
             
-            let filtered = sites.filter(site => {
-                const matchesCategory = activeCategory === 'Todos' || site.category === activeCategory;
-                const matchesSearch = site.title.toLowerCase().includes(searchQuery) || 
-                                      site.url.toLowerCase().includes(searchQuery);
-                return matchesCategory && matchesSearch;
-            });
+            localStorage.setItem('site_votes_v4', JSON.stringify(votes));
 
-            // Sort by Votes
-            filtered.sort((a, b) => b.votes - a.votes);
+            if (db) {
+                db.collection("votes").doc(String(id)).set({
+                    count: votes[id]
+                }, { merge: true });
+            }
 
-            document.getElementById('siteCountText').textContent = `Exibindo ${filtered.length} ${filtered.length === 1 ? 'site' : 'sites'}`;
+            renderCards();
+        }
 
+        function resetVotes() {
+            if (confirm('Tem certeza de que deseja zerar os votos?')) {
+                initialSites.forEach(site => {
+                    votes[site.id] = 0;
+                    if (db) db.collection("votes").doc(String(site.id)).set({ count: 0 });
+                });
+                localStorage.setItem('site_votes_v4', JSON.stringify(votes));
+                renderCards();
+            }
+        }
+
+        function renderCards() {
             const grid = document.getElementById('sitesGrid');
             const emptyState = document.getElementById('emptyState');
+            const searchVal = document.getElementById('searchInput').value.toLowerCase();
+
+            let filtered = initialSites.filter(site => {
+                const matchesCat = currentCategory === 'all' || site.category === currentCategory;
+                const matchesSearch = site.author.toLowerCase().includes(searchVal) || site.url.toLowerCase().includes(searchVal);
+                return matchesCat && matchesSearch;
+            });
+
+            filtered.sort((a, b) => (votes[b.id] || 0) - (votes[a.id] || 0));
+
+            grid.innerHTML = '';
 
             if (filtered.length === 0) {
-                grid.innerHTML = '';
                 emptyState.classList.remove('hidden');
-                emptyState.classList.add('flex');
             } else {
                 emptyState.classList.add('hidden');
-                emptyState.classList.remove('flex');
-                grid.innerHTML = filtered.map((site, index) => createCardHTML(site, index)).join('');
-            }
 
-            lucide.createIcons();
-        }
+                filtered.forEach((site, index) => {
+                    const count = votes[site.id] || 0;
+                    const isGitHub = site.url.includes('github.com') && site.url.endsWith('.git');
+                    const displayUrl = site.url.replace('https://', '').replace('.git', '');
 
-        function createCardHTML(site, index) {
-            const formattedDomain = getDomainName(site.url);
-            const isGithub = site.url.includes('github.com');
-            const upvoteActive = site.userVote === 1;
-            const downvoteActive = site.userVote === -1;
+                    let rankBadge = '';
+                    if (index === 0 && count > 0) rankBadge = `<span class="bg-amber-500/10 text-amber-400 border border-amber-500/30 text-xs px-2.5 py-1 rounded-full font-semibold"><i class="fa-solid fa-trophy mr-1"></i>1º</span>`;
+                    else if (index === 1 && count > 0) rankBadge = `<span class="bg-slate-300/10 text-slate-300 border border-slate-300/30 text-xs px-2.5 py-1 rounded-full font-semibold"><i class="fa-solid fa-medal mr-1"></i>2º</span>`;
+                    else if (index === 2 && count > 0) rankBadge = `<span class="bg-amber-700/10 text-amber-600 border border-amber-700/30 text-xs px-2.5 py-1 rounded-full font-semibold"><i class="fa-solid fa-award mr-1"></i>3º</span>`;
 
-            return `
-                <div class="site-card glass-card rounded-2xl p-5 flex flex-col justify-between hover:border-slate-700 relative group">
-                    ${index < 3 && site.votes > 0 ? `
-                        <div class="absolute -top-2.5 -right-2.5 w-7 h-7 rounded-full flex items-center justify-center text-xs font-extrabold shadow-lg ${
-                            index === 0 ? 'bg-amber-400 text-amber-950 ring-4 ring-amber-400/20' : 
-                            index === 1 ? 'bg-slate-300 text-slate-900 ring-4 ring-slate-300/20' : 
-                            'bg-amber-700 text-amber-100 ring-4 ring-amber-700/20'
-                        }">
-                            #${index + 1}
-                        </div>
-                    ` : ''}
-
-                    <div>
-                        <div class="flex items-start justify-between gap-3 mb-3">
-                            <div class="flex items-center gap-3">
-                                <div class="w-10 h-10 rounded-xl bg-slate-800 border border-slate-700/60 p-2 flex items-center justify-center shrink-0 overflow-hidden text-blue-400">
-                                    <i data-lucide="${isGithub ? 'github' : 'globe'}" class="w-5 h-5"></i>
-                                </div>
+                    const card = document.createElement('div');
+                    card.className = 'glass rounded-2xl p-5 flex flex-col justify-between card-hover border border-slate-800/80';
+                    card.innerHTML = `
+                        <div>
+                            <div class="flex items-start justify-between gap-3 mb-4">
                                 <div>
-                                    <h3 class="font-bold text-slate-100 group-hover:text-blue-400 transition-colors line-clamp-1">${escapeHtml(site.title)}</h3>
-                                    <span class="inline-block px-2 py-0.5 rounded-md text-[10px] font-semibold bg-slate-800 text-slate-400 border border-slate-700/50 mt-0.5">
-                                        ${escapeHtml(site.category)}
+                                    <span class="inline-flex items-center gap-1.5 text-xs text-brand-400 bg-brand-500/10 border border-brand-500/20 px-2.5 py-1 rounded-md font-medium mb-2">
+                                        <i class="fa-solid ${getCategoryIcon(site.category)}"></i>
+                                        ${site.category}
                                     </span>
+                                    <h3 class="text-lg font-bold text-slate-100">${site.author}</h3>
                                 </div>
+                                ${rankBadge}
                             </div>
 
-                            <a href="${escapeHtml(site.url)}" target="_blank" rel="noopener noreferrer" title="Visitar link" class="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-all border border-transparent hover:border-slate-700">
-                                <i data-lucide="external-link" class="w-4 h-4"></i>
+                            <div class="bg-slate-900/80 rounded-xl p-3 border border-slate-800/80 mb-5">
+                                <a href="${site.url}" target="_blank" class="text-xs text-slate-300 hover:text-brand-400 font-mono flex items-center gap-2 truncate">
+                                    <i class="${isGitHub ? 'fa-brands fa-github text-slate-400' : 'fa-solid fa-arrow-up-right-from-square text-brand-500'}"></i>
+                                    <span class="truncate">${displayUrl}</span>
+                                </a>
+                            </div>
+                        </div>
+
+                        <div class="pt-4 border-t border-slate-800/60 flex items-center justify-between">
+                            <a href="${site.url}" target="_blank" class="text-xs text-slate-400 hover:text-white flex items-center gap-1">
+                                Abrir site <i class="fa-solid fa-chevron-right text-[10px]"></i>
                             </a>
+
+                            <div class="flex items-center bg-slate-900/90 rounded-xl border border-slate-800 p-1">
+                                <button onclick="vote(${site.id}, -1)" ${count === 0 ? 'disabled' : ''} class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-slate-400 disabled:cursor-not-allowed">
+                                    <i class="fa-solid fa-minus text-xs"></i>
+                                </button>
+                                
+                                <span class="px-3 font-bold text-sm min-w-[2.5rem] text-center ${count > 0 ? 'text-brand-400' : 'text-slate-400'}">
+                                    ${count}
+                                </span>
+
+                                <button onclick="vote(${site.id}, 1)" class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-emerald-400 hover:bg-emerald-500/10">
+                                    <i class="fa-solid fa-plus text-xs"></i>
+                                </button>
+                            </div>
                         </div>
-                    </div>
-
-                    <div class="pt-3 mt-3 border-t border-slate-800/80 flex items-center justify-between">
-                        <span class="text-xs text-slate-500 truncate max-w-[140px]">${formattedDomain}</span>
-
-                        <div class="flex items-center bg-slate-800/90 rounded-xl border border-slate-700/80 p-1">
-                            <button onclick="vote('${site.id}', 1)" class="p-1.5 rounded-lg transition-all ${upvoteActive ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-700/50'}" title="Voto Positivo">
-                                <i data-lucide="arrow-big-up" class="w-4 h-4"></i>
-                            </button>
-
-                            <span class="px-2.5 text-xs font-bold ${site.votes > 0 ? 'text-blue-400' : site.votes < 0 ? 'text-rose-400' : 'text-slate-400'}">
-                                ${site.votes}
-                            </span>
-
-                            <button onclick="vote('${site.id}', -1)" class="p-1.5 rounded-lg transition-all ${downvoteActive ? 'bg-rose-600 text-white' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-700/50'}" title="Voto Negativo">
-                                <i data-lucide="arrow-big-down" class="w-4 h-4"></i>
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            `;
-        }
-
-        function vote(id, direction) {
-            const site = sites.find(s => s.id === id);
-            if (!site) return;
-
-            if (site.userVote === direction) {
-                site.votes -= direction;
-                site.userVote = 0;
-            } else {
-                site.votes += direction - site.userVote;
-                site.userVote = direction;
-            }
-
-            saveSites();
-            filterAndRender();
-        }
-
-        function handleAddSite(e) {
-            e.preventDefault();
-
-            const title = document.getElementById('siteTitle').value.trim();
-            let url = document.getElementById('siteUrl').value.trim();
-            const category = document.getElementById('siteCategory').value;
-
-            if (!url.startsWith('http://') && !url.startsWith('https://')) {
-                url = 'https://' + url;
-            }
-
-            const newSite = {
-                id: Date.now().toString(),
-                title,
-                url,
-                category,
-                votes: 1,
-                userVote: 1
-            };
-
-            sites.unshift(newSite);
-            saveSites();
-            
-            renderCategories();
-            filterAndRender();
-            closeModal();
-
-            showToast('Website adicionado com sucesso!');
-            document.getElementById('addSiteForm').reset();
-        }
-
-        function openModal() {
-            const overlay = document.getElementById('modalOverlay');
-            const card = document.getElementById('modalCard');
-            overlay.classList.remove('hidden');
-            overlay.classList.add('flex');
-            setTimeout(() => {
-                overlay.classList.remove('opacity-0');
-                card.classList.remove('scale-95');
-                card.classList.add('scale-100');
-            }, 10);
-        }
-
-        function closeModal() {
-            const overlay = document.getElementById('modalOverlay');
-            const card = document.getElementById('modalCard');
-            overlay.classList.add('opacity-0');
-            card.classList.remove('scale-100');
-            card.classList.add('scale-95');
-            setTimeout(() => {
-                overlay.classList.add('hidden');
-                overlay.classList.remove('flex');
-            }, 200);
-        }
-
-        function showToast(msg) {
-            const toast = document.getElementById('toast');
-            const toastMessage = document.getElementById('toastMessage');
-            toastMessage.textContent = msg;
-
-            toast.classList.remove('translate-y-20', 'opacity-0', 'pointer-events-none');
-            setTimeout(() => {
-                toast.classList.add('translate-y-20', 'opacity-0', 'pointer-events-none');
-            }, 3000);
-        }
-
-        function getDomainName(url) {
-            try {
-                const parsed = new URL(url);
-                return parsed.hostname.replace('www.', '');
-            } catch (e) {
-                return url;
+                    `;
+                    grid.appendChild(card);
+                });
             }
         }
 
-        function escapeHtml(str) {
-            if (!str) return '';
-            return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
-        }
+        renderCards();
     </script>
 </body>
 </html>
