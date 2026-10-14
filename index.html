@@ -26,7 +26,7 @@
     </script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     
-    <!-- Firebase SDK (para salvar os votos na nuvem) -->
+    <!-- Firebase SDK -->
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
 
@@ -62,8 +62,11 @@
                 </div>
             </div>
 
-            <!-- Botão Reset -->
+            <!-- Contador de Votos Restantes -->
             <div class="flex items-center space-x-4">
+                <div class="bg-slate-900 border border-slate-800 px-3.5 py-2 rounded-xl text-xs font-medium text-slate-300">
+                    Votos realizados: <span id="userVoteCount" class="font-bold text-brand-400">0</span>/2
+                </div>
                 <button onclick="resetVotes()" class="text-xs text-slate-400 hover:text-rose-400 transition-colors flex items-center gap-1.5 px-3 py-2 rounded-lg hover:bg-slate-800/50">
                     <i class="fa-solid fa-rotate-left"></i>
                     <span>Resetar Votos</span>
@@ -149,24 +152,25 @@
             { id: 14, author: 'Viegas', category: 'Advocacia', url: 'https://viegas08.github.io/site1/' }
         ];
 
+
         let currentCategory = 'all';
-        let votes = JSON.parse(localStorage.getItem('site_votes_v4')) || {};
+        let votes = {};
+        
+        // Controle de votos locais da sessão
+        let userVoteCount = parseInt(localStorage.getItem('user_vote_count') || '0');
 
         initialSites.forEach(site => {
-            if (votes[site.id] === undefined || votes[site.id] < 0) {
-                votes[site.id] = 0;
-            }
+            votes[site.id] = 0;
         });
 
-        if (db) {
-            db.collection("votes").onSnapshot((snapshot) => {
-                snapshot.forEach((doc) => {
-                    const count = doc.data().count;
-                    votes[doc.id] = count < 0 ? 0 : count;
-                });
-                renderCards();
+        // Sincronização em Tempo Real via Firebase
+        db.collection("votes").onSnapshot((snapshot) => {
+            snapshot.forEach((doc) => {
+                const count = doc.data().count;
+                votes[doc.id] = count < 0 ? 0 : count;
             });
-        }
+            renderCards();
+        });
 
         function getCategoryIcon(cat) {
             switch(cat) {
@@ -188,30 +192,42 @@
             renderCards();
         }
 
-        // Função de votação atualizada com Math.max(0, ...)
         function vote(id, delta) {
-            const currentVotes = votes[id] || 0;
-            // Garante que o resultado nunca seja menor que 0
-            votes[id] = Math.max(0, currentVotes + delta);
-            
-            localStorage.setItem('site_votes_v4', JSON.stringify(votes));
-
-            if (db) {
-                db.collection("votes").doc(String(id)).set({
-                    count: votes[id]
-                }, { merge: true });
+            // Se tentar votar positivo mas já atingiu o limite de 2 votos
+            if (delta > 0 && userVoteCount >= MAX_VOTES_PER_USER) {
+                alert('Você já atingiu o limite máximo de 2 votos por sessão!');
+                return;
             }
+
+            const currentVotes = votes[id] || 0;
+            const nextVotes = Math.max(0, currentVotes + delta);
+
+            // Atualiza a contagem do usuário
+            if (delta > 0) {
+                userVoteCount++;
+            } else if (delta < 0 && userVoteCount > 0) {
+                userVoteCount--;
+            }
+
+            localStorage.setItem('user_vote_count', userVoteCount.toString());
+            votes[id] = nextVotes;
+
+            // Salva no Firebase
+            db.collection("votes").doc(String(id)).set({
+                count: nextVotes
+            }, { merge: true });
 
             renderCards();
         }
 
         function resetVotes() {
-            if (confirm('Tem certeza de que deseja zerar os votos?')) {
+            if (confirm('Tem certeza de que deseja zerar os votos do sistema e o seu limite local?')) {
                 initialSites.forEach(site => {
                     votes[site.id] = 0;
-                    if (db) db.collection("votes").doc(String(site.id)).set({ count: 0 });
+                    db.collection("votes").doc(String(site.id)).set({ count: 0 });
                 });
-                localStorage.setItem('site_votes_v4', JSON.stringify(votes));
+                userVoteCount = 0;
+                localStorage.setItem('user_vote_count', '0');
                 renderCards();
             }
         }
@@ -220,6 +236,9 @@
             const grid = document.getElementById('sitesGrid');
             const emptyState = document.getElementById('emptyState');
             const searchVal = document.getElementById('searchInput').value.toLowerCase();
+
+            // Atualiza badge no header
+            document.getElementById('userVoteCount').textContent = userVoteCount;
 
             let filtered = initialSites.filter(site => {
                 const matchesCat = currentCategory === 'all' || site.category === currentCategory;
@@ -245,6 +264,10 @@
                     if (index === 0 && count > 0) rankBadge = `<span class="bg-amber-500/10 text-amber-400 border border-amber-500/30 text-xs px-2.5 py-1 rounded-full font-semibold"><i class="fa-solid fa-trophy mr-1"></i>1º</span>`;
                     else if (index === 1 && count > 0) rankBadge = `<span class="bg-slate-300/10 text-slate-300 border border-slate-300/30 text-xs px-2.5 py-1 rounded-full font-semibold"><i class="fa-solid fa-medal mr-1"></i>2º</span>`;
                     else if (index === 2 && count > 0) rankBadge = `<span class="bg-amber-700/10 text-amber-600 border border-amber-700/30 text-xs px-2.5 py-1 rounded-full font-semibold"><i class="fa-solid fa-award mr-1"></i>3º</span>`;
+
+                    // Desabilita os botões dependendo das regras de limite e valor 0
+                    const isPlusDisabled = userVoteCount >= MAX_VOTES_PER_USER;
+                    const isMinusDisabled = count === 0;
 
                     const card = document.createElement('div');
                     card.className = 'glass rounded-2xl p-5 flex flex-col justify-between card-hover border border-slate-800/80';
@@ -275,7 +298,7 @@
                             </a>
 
                             <div class="flex items-center bg-slate-900/90 rounded-xl border border-slate-800 p-1">
-                                <button onclick="vote(${site.id}, -1)" ${count === 0 ? 'disabled' : ''} class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-slate-400 disabled:cursor-not-allowed">
+                                <button onclick="vote(${site.id}, -1)" ${isMinusDisabled ? 'disabled' : ''} class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-slate-400 disabled:cursor-not-allowed">
                                     <i class="fa-solid fa-minus text-xs"></i>
                                 </button>
                                 
@@ -283,7 +306,7 @@
                                     ${count}
                                 </span>
 
-                                <button onclick="vote(${site.id}, 1)" class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-emerald-400 hover:bg-emerald-500/10">
+                                <button onclick="vote(${site.id}, 1)" ${isPlusDisabled ? 'disabled' : ''} class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-emerald-400 hover:bg-emerald-500/10 disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-slate-400 disabled:cursor-not-allowed">
                                     <i class="fa-solid fa-plus text-xs"></i>
                                 </button>
                             </div>
