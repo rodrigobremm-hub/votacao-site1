@@ -128,11 +128,9 @@
             measurementId: "G-EWVBYT7LSC"
         };
 
-        let db = null;
-        if (firebaseConfig.apiKey !== "SUA_API_KEY") {
-            firebase.initializeApp(firebaseConfig);
-            db = firebase.firestore();
-        }
+        // Inicialização direta do Firebase
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
 
         const initialSites = [
             { id: 1, author: 'Marley Renan', category: 'Clínica Veterinária', url: 'https://marley7976.github.io/site3/' },
