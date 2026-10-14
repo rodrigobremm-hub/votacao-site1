@@ -120,7 +120,7 @@
     </footer>
 
     <script>
-        // CONFIGURAÇÃO DO FIREBASE (Substitua pelos dados do seu projeto Firebase)
+        // CONFIGURAÇÃO DO FIREBASE
         const firebaseConfig = {
             apiKey: "AIzaSyB4h8t9FKvCIBAKVpYX404tqFFoAFEjMz0",
             authDomain: "plasma-envoy-341217.firebaseapp.com",
@@ -131,9 +131,11 @@
             measurementId: "G-EWVBYT7LSC"
         };
 
-        // Inicialização direta do Firebase
+        // Inicialização do Firebase
         firebase.initializeApp(firebaseConfig);
         const db = firebase.firestore();
+
+        const MAX_VOTES_PER_USER = 2; // Limite de 2 votos por usuário/sessão
 
         const initialSites = [
             { id: 1, author: 'Marley Renan', category: 'Clínica Veterinária', url: 'https://marley7976.github.io/site3/' },
@@ -151,7 +153,6 @@
             { id: 13, author: 'G santos', category: 'Advocacia', url: 'https://guisantosss.github.io/SiteAdvogado/' },
             { id: 14, author: 'Viegas', category: 'Advocacia', url: 'https://viegas08.github.io/site1/' }
         ];
-
 
         let currentCategory = 'all';
         let votes = {};
